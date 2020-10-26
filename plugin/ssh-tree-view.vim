@@ -8,61 +8,70 @@ fun! s:sshBufCreate()
   endif
 endfun
 
-fun! s:sshBufReadCmd()
+fun! s:sshBufReadCmd(bname, bnr)
   " While reading the file it is not modifiable.
-  filetype detect
-  set nomodifiable
-  let b:sshView = winsaveview()
-  if !exists("b:sshTempFile")
-    let b:sshTempfile = tempname()
+  if empty(&filetype)
+    filetype detect
   endif
-  let as = split(strpart(bufname(), 6), ':')
+  set nomodifiable
+  let view = winsaveview()
+  let bnr = type(a:bnr) == v:t_none ? bufnr() : a:bnr
+  let tempfile = getbufvar(bnr, 'sshTempfile', tempname())
+  call setbufvar(bnr, 'sshTempfile', tempfile)
+  let as = split(strpart(a:bname, 6), ':')
   let host = as[0]
   let file = join(as[1:])
   call job_start(
         \ ["ssh", host, "cat", file],
-        \ {"exit_cb":  {handle, exitCode -> s:sshBufReadFn(host, file, bufnr(), handle, exitCode)},
+        \ {"exit_cb":  {handle, exitCode -> s:sshBufReadFn(host, file, tempfile, bnr, view, handle, exitCode)},
         \  "out_io":   "file",
         \  "err_cb":   function("s:sshErrFn"),
-        \  "out_name": b:sshTempfile} )
+        \  "out_name": tempfile} )
 endfun
 
-fun! s:sshBufReadFn(host, file, bufnr, handle, exitCode)
-  if a:exitCode > 0
-    set modifiable
-    return
-  endif
-  if bufnr() != a:bufnr
-    return
-  endif
+fun! s:sshBufReadFn(host, file, tempfile, bufnr, view, handle, exitCode) abort
   set modifiable
-  0,$d_
-  exe "read " . b:sshTempfile
-  1delete_
-  if exists("b:sshView")
-    call winrestview(b:sshView)
-    unlet b:sshView
+  if a:exitCode > 0
+    return
   endif
+  let cbufnr = bufnr()
+  if cbufnr != a:bufnr
+    set lazyredraw
+    exe "sb " . a:bufnr
+  endif
+  0,$d_
+  exe "silent keepalt read " . a:tempfile
+  1delete_
+  call winrestview(a:view)
   set nomodified
+  if cbufnr != a:bufnr
+    wincmd c
+    set nolazyredraw
+  endif
+  call delete(a:tempfile)
 endfun
 
 fun! s:sshBufWriteCmd()
   if exists("b:sshWriteLock") && b:sshWriteLock
+    echohl WarningMsg
+    echom "ssh BufWriteCmd: writing " . bufname() . " in progress ..."
+    echohl Normal
     return
   endif
   let b:sshWriteLock = v:true
   let tempfile = tempname()
-  call delete(b:sshTempfile)
-  exe "1,$write! " . b:sshTempfile
-  call term_start(
-        \ ["scp", b:sshTempfile, strpart(bufname(), 6)],
-        \ {"hidden": v:true,
-        \  "term_finish": "close",
-        \  "exit_cb": function("s:sshBufWriteFn") })
+  exe "silent keepalt %write! " . tempfile
+  call job_start(
+        \ ["scp", tempfile, strpart(bufname(), 6)],
+        \ {"err_cb": function("s:sshErrFn"),
+        \  "exit_cb": {handle, exitCode -> s:sshBufWriteFn(tempfile, changenr(), handle, exitCode)} })
 endfun
 
-fun! s:sshBufWriteFn(handler, exitCode)
-  set nomodified
+fun! s:sshBufWriteFn(tempfile, changenr, handler, exitCode)
+  if a:changenr == changenr()
+    set nomodified
+  endif
+  call delete(a:tempfile)
   if exists("b:sshWriteLock")
     unlet b:sshWriteLock
   endif
@@ -72,7 +81,7 @@ augroup SshEdit
   au!
   au BufCreate   ssh://* call s:sshBufCreate()
   au BufWriteCmd ssh://* call s:sshBufWriteCmd()
-  au BufReadCmd  ssh://* call s:sshBufReadCmd()
+  au BufReadCmd  ssh://* call s:sshBufReadCmd(expand("<afile>"), expand("<abuf>"))
 augroup END
 
 command -nargs=1 SshEdit :call SshEdit(<q-args>)
@@ -219,6 +228,7 @@ fun! s:openTreeViewSync(host, path) abort
   if type(bufnr) == v:t_number
     let winnr = bufwinnr(bufnr)
     exe winnr . "wincmd w"
+    setlocal modifiable
     %d_
   else
     vert 30 new
@@ -233,11 +243,13 @@ fun! s:openTreeViewSync(host, path) abort
     setlocal nofoldenable
     setlocal nonumber
     setlocal norelativenumber
+    setlocal modifiable
     setf sshtreeview
 
     map <buffer> <silent> <Enter> :call <SID>treeViewEnter()<CR>
     map <buffer> <silent> C :call <SID>treeViewChangeRoot()<CR>
     map <buffer> <silent> u :call <SID>treeViewUp()<CR>
+    map <buffer> <silent> r :call <SID>treeViewRefresh()<CR>
   endif
 
   let pathComps = split(path, '/')
@@ -265,6 +277,7 @@ fun! s:openTreeViewSync(host, path) abort
     call append(line('$') - 1, (node.type == '/' ? '▸ ' : '  ') . node.pathComp . node.type)
   endfor
   call cursor(3, 1)
+  setlocal nomodifiable
 endfun
 
 " If the `g:sshCache` does not contian inforamtion about the path, fetch it
@@ -420,6 +433,20 @@ fun! s:treeViewUp()
   if cwd_ !=# cwd
     let host = getline(1)
     call s:sshTreeView(host . ":" . cwd_)
+  endif
+endfun
+
+fun! s:treeViewRefresh()
+  let path = s:treeViewCurrentPath()
+  let host = getline(1)
+  let f = s:sshCacheFind(host, path)
+  if f.type != "/"
+    let bnr = bufnr("ssh://" . host . ":" . path)
+    if bnr != -1
+      if getbufvar(bnr, '&modified') == 0
+        call s:sshBufReadCmd(bufname(bnr), bnr)
+      endif
+    endif
   endif
 endfun
 
