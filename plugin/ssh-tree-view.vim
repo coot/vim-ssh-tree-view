@@ -218,23 +218,23 @@ fun! s:openTreeViewSync(host, path) abort
     %d_
   else
     vert 30 new
-  endif
-  let b:SshTreeView = v:true
-  setlocal winfixwidth
-  setlocal buftype=nofile
-  setlocal bufhidden=wipe
-  setlocal noswapfile
-  setlocal nowrap
-  setlocal nobuflisted
-  setlocal nolist
-  setlocal nofoldenable
-  setlocal nonumber
-  setlocal norelativenumber
-  setf sshtreeview
+    let b:SshTreeView = v:true
+    setlocal winfixwidth
+    setlocal buftype=nofile
+    setlocal bufhidden=wipe
+    setlocal noswapfile
+    setlocal nowrap
+    setlocal nobuflisted
+    setlocal nolist
+    setlocal nofoldenable
+    setlocal nonumber
+    setlocal norelativenumber
+    setf sshtreeview
 
-  map <buffer> <silent> <Enter> :call <SID>treeViewEnter()<CR>
-  map <buffer> <silent> C :call <SID>treeViewChangeRoot()<CR>
-  map <buffer> <silent> u :call <SID>treeViewUp()<CR>
+    map <buffer> <silent> <Enter> :call <SID>treeViewEnter()<CR>
+    map <buffer> <silent> C :call <SID>treeViewChangeRoot()<CR>
+    map <buffer> <silent> u :call <SID>treeViewUp()<CR>
+  endif
 
   let pathComps = split(path, '/')
   let path=""
