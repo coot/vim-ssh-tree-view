@@ -2,13 +2,13 @@
 " - Editing files over ssh
 "
 
-fun! SshBufCreate()
+fun! s:sshBufCreate()
   if bufname() =~ '^ssh:\/\/'
     set buftype=acwrite
   endif
 endfun
 
-fun! SshBufReadCmd()
+fun! s:sshBufReadCmd()
   " While reading the file it is not modifiable.
   filetype detect
   set nomodifiable
@@ -27,8 +27,12 @@ fun! SshBufReadCmd()
         \  "out_name": b:sshTempfile} )
 endfun
 
-fun! SshBufReadDone(host, file, handle, exitCode)
-  if bufname() != "ssh://" . a:host . ":" . a:file
+fun! s:sshBufReadFn(host, file, bufnr, handle, exitCode)
+  if a:exitCode > 0
+    set modifiable
+    return
+  endif
+  if bufnr() != a:bufnr
     return
   endif
   set modifiable
@@ -42,7 +46,7 @@ fun! SshBufReadDone(host, file, handle, exitCode)
   set nomodified
 endfun
 
-fun! SshBufWriteCmd()
+fun! s:sshBufWriteCmd()
   if exists("b:sshWriteLock") && b:sshWriteLock
     return
   endif
@@ -57,7 +61,7 @@ fun! SshBufWriteCmd()
         \  "exit_cb": function("s:sshBufWriteFn") })
 endfun
 
-fun! SshBufWriteDone(handler, exitCode)
+fun! s:sshBufWriteFn(handler, exitCode)
   set nomodified
   if exists("b:sshWriteLock")
     unlet b:sshWriteLock
@@ -66,9 +70,9 @@ endfun
 
 augroup SshEdit
   au!
-  au BufCreate   ssh://* call SshBufCreate()
-  au BufWriteCmd ssh://* call SshBufWriteCmd()
-  au BufReadCmd  ssh://* call SshBufReadCmd()
+  au BufCreate   ssh://* call s:sshBufCreate()
+  au BufWriteCmd ssh://* call s:sshBufWriteCmd()
+  au BufReadCmd  ssh://* call s:sshBufReadCmd()
 augroup END
 
 command -nargs=1 SshEdit :call SshEdit(<q-args>)
