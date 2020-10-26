@@ -19,12 +19,11 @@ fun! SshBufReadCmd()
   let as = split(strpart(bufname(), 6), ':')
   let host = as[0]
   let file = join(as[1:])
-  call term_start(
+  call job_start(
         \ ["ssh", host, "cat", file],
-        \ {"hidden":   v:true,
-        \  "term_finish": "close",
-        \  "exit_cb":  {handle, exitCode -> SshBufReadDone(host, file, handle, exitCode)},
+        \ {"exit_cb":  {handle, exitCode -> s:sshBufReadFn(host, file, bufnr(), handle, exitCode)},
         \  "out_io":   "file",
+        \  "err_cb":   function("s:sshErrFn"),
         \  "out_name": b:sshTempfile} )
 endfun
 
@@ -55,7 +54,7 @@ fun! SshBufWriteCmd()
         \ ["scp", b:sshTempfile, strpart(bufname(), 6)],
         \ {"hidden": v:true,
         \  "term_finish": "close",
-        \  "exit_cb": function("SshBufWriteDone") })
+        \  "exit_cb": function("s:sshBufWriteFn") })
 endfun
 
 fun! SshBufWriteDone(handler, exitCode)
@@ -160,18 +159,15 @@ endfun
 " Open tree view
 "
 fun! s:sshTreeView(path) abort
-  let g:path1 = a:path
   if a:path =~ ':'
-    let [host, path] = split(a:path, ":")
-    let path = matchstr(path, '^.\{-}\ze\/\?$')
+    let args = split(a:path, ":")
+    let host = args[0]
+    let path = matchstr(get(args, 1, "~"), '^.\{-}\ze\/\?$')
   else
     let host = a:path
     let path = "~"
   endif
-  let g:host = host
-  let g:path = path
   let dir = s:sshCacheFind(host, path)
-  let g:dir = copy(dir)
   if type(dir) != v:t_dict || (type(dir) == v:t_dict && !dir.cached)
     call s:openTreeViewAsync(host, path)
   else
@@ -272,12 +268,11 @@ endfun
 "
 fun! s:openTreeViewAsync(host, path)
   let path = (a:path =~ '^\/' || a:path =~ '^\~\/' || a:path == '~') ? a:path : "~/" . a:path
-  call term_start(
+  call job_start(
         \ ["ssh", a:host, "ls -1F", path],
-        \ {"hidden": v:true,
-        \  "term_finish": "close",
-        \  "exit_cb":  function("s:sshExitCb"),
-        \  "callback": {handle, msg -> s:openTreeViewAsyncFn(a:host, path, handle, msg)} })
+        \ {"err_io": "pipe",
+        \  "err_cb": function("s:sshErrFn"),
+        \  "out_cb": {handle, msg -> s:openTreeViewAsyncFn(a:host, path, handle, msg)} })
 endfun
 
 fun! s:openTreeViewAsyncFn(host, path, handle, msg)
@@ -294,18 +289,24 @@ endfun
 "
 fun! s:sshList(host, path, bufnr, line)
   let path = (a:path =~ '^\/' || a:path =~ '^\~\/' || a:path == '~') ? a:path : "~/" . a:path
-  call term_start(
+  call job_start(
         \ ["ssh", a:host, "ls -1F", escape(path, ' ')],
-        \ {"hidden":   v:true,
-        \  "term_finish": "close",
-        \  "exit_cb":  function("s:sshExitCb"),
-        \  "callback": {handle, msg -> s:sshListFn(a:host, path, handle, msg, a:bufnr, a:line)} })
+        \ {"err_cb": function("s:sshErrFn"),
+        \  "out_cb": {handle, msg -> s:sshListOutFn(a:host, path, handle, msg)},
+        \  "exit_cb": {handle, exitCode -> s:sshListExitFn(a:host, path, handle, exitCode, a:bufnr, a:line)} })
 endfun
 
-fun! s:sshListFn(host, path, handle, msg, bufnr, line) abort
+fun! s:sshListOutFn(host, path, handle, msg)
   let listing = split(a:msg, '\r\n')
-  let wincmdp = v:false
   call s:sshCacheInsert(a:host, a:path, listing)
+endfun
+
+fun! s:sshListExitFn(host, path, handle, errorCode, bufnr, line) abort
+  let g:errorCode = a:errorCode
+  if a:errorCode > 0
+    return
+  endif
+  let wincmdp = v:false
   if a:bufnr != bufnr()
     let winnr = bufwinnr(a:bufnr)
     if winnr == -1
@@ -323,15 +324,15 @@ fun! s:sshListFn(host, path, handle, msg, bufnr, line) abort
 
   let indent = matchstr(getline(lnr), '^\s*') . "  "
   let idx = 0
-  for typedPathComp in sort(listing)
-    let pathComp = matchstr(typedPathComp, '.\{-}\ze[*/=>@|]\?$')
-    let type = matchstr(typedPathComp, '[*/=>$|]$')
-    if type == '/'
+  let dir = s:sshCacheFind(a:host, a:path)
+  for pathComp in sort(keys(dir.contents))
+    let e = dir.contents[pathComp]
+    if e.type == '/'
       let lindent = indent . "▸ "
     else
       let lindent = indent . "  "
     endif
-    call append(lnr + idx, lindent . pathComp)
+    call append(lnr + idx, lindent . e.pathComp)
     let idx += 1
   endfor
 
@@ -454,10 +455,9 @@ endfun
 " - Ssh utils
 "
 
-fun! s:sshExitCb(handle, exitCode) abort
-  if str2nr(a:exitCode) != 0
-    echohl Error
-    echom "ssh exit code: " . a:exitCode
-    echohl Normal
-  endif
+fun! s:sshErrFn(handle, msg)
+  echohl Error
+  echom a:msg
+  echohl Normal
 endfun
+
