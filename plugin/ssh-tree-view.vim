@@ -120,7 +120,7 @@ fun! s:sshCacheInsert(host, path, listing)
     if has_key(dir.contents, pathComp)
       continue
     endif
-    let type = matchstr(typedPathComp, '[*/=>$|]$')
+    let type = matchstr(typedPathComp, '[*/=>$@|]$')
     if type == '/'
       let d = {"pathComp": pathComp,
             \  "path": (empty(a:path) ? "" : a:path . "/") . pathComp,
@@ -262,7 +262,7 @@ fun! s:openTreeViewSync(host, path) abort
   call append(line('$') - 1, a:path)
   for pathComp in sort(keys(dir.contents))
     let node = dir.contents[pathComp]
-    call append(line('$') - 1, (node.type == '/' ? '▸ ' : '  ') . node.pathComp)
+    call append(line('$') - 1, (node.type == '/' ? '▸ ' : '  ') . node.pathComp . node.type)
   endfor
   call cursor(3, 1)
 endfun
@@ -336,7 +336,7 @@ fun! s:sshListExitFn(host, path, handle, errorCode, bufnr, line) abort
     else
       let lindent = indent . "  "
     endif
-    call append(lnr + idx, lindent . e.pathComp)
+    call append(lnr + idx, lindent . e.pathComp . e.type)
     let idx += 1
   endfor
 
@@ -429,7 +429,7 @@ fun! s:treeViewCurrentPath() abort
   let base = getline(3)
   let lnr = line(".")
   let l = getline(lnr)
-  let as = matchlist(getline("."), '^\(\s*\%([▸▾] \)\?\)\(.*\)')
+  let as = matchlist(getline("."), '^\(\s*\%([▸▾] \)\?\)\(.\{-}\)[*/=>@|]\?$')
   let indent = len(substitute(as[1], '.', ' ', 'g'))
   let pathComps = [as[2]]
 
