@@ -402,7 +402,7 @@ fun! s:treeViewEnter() abort
     while v:true
       let indent_ = len(substitute(matchstr(getline(lnr + 1), '^\s*\%([▸▾] \)\?'), '.', ' ', 'g'))
       if indent_ > indent
-        exe "normal +dd_"
+        normal +d_
         normal -
       else
         break
