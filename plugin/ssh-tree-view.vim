@@ -243,7 +243,6 @@ fun! s:openTreeViewSync(host, path) abort
     setlocal nofoldenable
     setlocal nonumber
     setlocal norelativenumber
-    setlocal modifiable
     setf sshtreeview
 
     map <buffer> <silent> <Enter> :call <SID>treeViewEnter()<CR>
@@ -269,6 +268,7 @@ fun! s:openTreeViewSync(host, path) abort
     endif
   endfor
 
+  setlocal modifiable
   call append(line('$') - 1, a:host)
   call append(line('$') - 1, "..")
   call append(line('$') - 1, a:path)
@@ -337,6 +337,7 @@ fun! s:sshListExitFn(host, path, handle, errorCode, bufnr, line) abort
     let lnr += 1
   endwhile
 
+  setlocal modifiable
   call setline(lnr, substitute(getline(lnr), '▸', '▾', ''))
 
   let indent = matchstr(getline(lnr), '^\s*') . "  "
@@ -352,6 +353,7 @@ fun! s:sshListExitFn(host, path, handle, errorCode, bufnr, line) abort
     call append(lnr + idx, lindent . e.pathComp . e.type)
     let idx += 1
   endfor
+  setlocal nomodifiable
 
   if wincmdp
     wincmd p
@@ -381,6 +383,7 @@ fun! s:treeViewEnter() abort
     if type(dir) != v:t_dict || (type(dir) == v:t_dict && dir.cached == v:false)
       call s:sshList(host, path, bufnr(), getline(lnr))
     else
+      setlocal modifiable
       let indent = substitute(matchstr(cline, '^\s*[▸▾] '), '.', ' ', 'g')
       let idx = 0
       for pathComp in sort(keys(dir.contents))
@@ -394,8 +397,10 @@ fun! s:treeViewEnter() abort
         let idx += 1
       endfor
       call setline(lnr, substitute(getline(lnr), '▸', '▾', ''))
+      setlocal nomodifiable
     endif
   elseif cline =~ '^\s*▾ '
+    setlocal modifiable
     let lnr = line(".")
     call setline(lnr, substitute(getline(lnr), '▾', '▸', ''))
     let indent = len(substitute(matchstr(getline(lnr), '^\s*[▸▾] '), '.', ' ', 'g'))
@@ -408,6 +413,7 @@ fun! s:treeViewEnter() abort
         break
       endif
     endwhile
+    setlocal nomodifiable
   else
     let host = getline(1)
     let path = s:treeViewCurrentPath()
