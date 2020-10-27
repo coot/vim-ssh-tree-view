@@ -175,13 +175,13 @@ fun! s:sshTreeView(path) abort
   if a:path =~ ':'
     let args = split(a:path, ":")
     let host = args[0]
-    let path = matchstr(get(args, 1, "~"), '^.\{-}\ze\/\?$')
+    let path = matchstr(get(args, 1, "~"), '^\/\?.\{-}\ze\/\?$')
   else
     let host = a:path
     let path = "~"
   endif
   let dir = s:sshCacheFind(host, path)
-  if type(dir) != v:t_dict || (type(dir) == v:t_dict && !dir.cached)
+  if type(dir) != v:t_dict || (type(dir) == v:t_dict && !get(dir, "cached", v:false))
     call s:openTreeViewAsync(host, path)
   else
     call s:openTreeViewSync(host, path)
@@ -489,8 +489,7 @@ fun! s:treeViewCurrentPath() abort
       break
     endif
   endwhile
-  call add(pathComps, base)
-  return join(reverse(pathComps), "/")
+  return (base == "/" ? "" : base) . "/" . join(reverse(pathComps), "/")
 endfun
 
 " -----------
