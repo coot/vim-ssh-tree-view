@@ -389,7 +389,8 @@ fun! s:treeViewEnter() abort
         else
           let lindent = indent . "  "
         endif
-        call append(lnr + idx, lindent . dir.contents[pathComp].pathComp)
+        let f = dir.contents[pathComp]
+        call append(lnr + idx, lindent . f.pathComp . f.type)
         let idx += 1
       endfor
       call setline(lnr, substitute(getline(lnr), '▸', '▾', ''))
