@@ -453,6 +453,11 @@ fun! s:treeViewRefresh()
         call s:sshBufReadCmd(bufname(bnr), bnr)
       endif
     endif
+  elseif f.type == "/"
+    let f.cached = v:false
+    let f.contents = {}
+    call s:treeViewEnter()
+    call s:treeViewEnter()
   endif
 endfun
 
