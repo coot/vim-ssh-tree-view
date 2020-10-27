@@ -467,7 +467,7 @@ fun! s:treeViewCurrentPath() abort
       break
     endif
     let l = getline(lnr)
-    let as = matchlist(l, '^\(\s*\%([▸▾] \)\?\)\(.*\)')
+    let as = matchlist(l, '^\(\s*\%([▸▾] \)\?\)\(.\{-}\)[*/=>@|]\?$')
     let indent_ = len(substitute(as[1], '.', ' ', 'g'))
     if indent_ >= indent
       continue
