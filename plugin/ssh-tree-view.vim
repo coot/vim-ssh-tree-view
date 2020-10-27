@@ -319,7 +319,6 @@ fun! s:sshListOutFn(host, path, handle, msg)
 endfun
 
 fun! s:sshListExitFn(host, path, handle, errorCode, bufnr, line) abort
-  let g:errorCode = a:errorCode
   if a:errorCode > 0
     return
   endif
