@@ -63,18 +63,27 @@ fun! s:sshBufWriteCmd()
   exe "silent keepalt %write! " . tempfile
   call job_start(
         \ ["scp", tempfile, strpart(bufname(), 6)],
-        \ {"err_cb": function("s:sshErrFn"),
-        \  "exit_cb": {handle, exitCode -> s:sshBufWriteFn(tempfile, changenr(), handle, exitCode)} })
+        \ {"err_cb": function("s:sshBufWriteErrFn"),
+        \  "exit_cb": {handle, exitCode -> s:sshBufWriteFn(bufnr(), tempfile, changenr(), handle, exitCode)} })
 endfun
 
-fun! s:sshBufWriteFn(tempfile, changenr, handler, exitCode)
+fun! s:sshBufWriteFn(bufnr, tempfile, changenr, handler, exitCode)
   if a:changenr == changenr()
     set nomodified
   endif
+  let fsize = getfsize(a:tempfile)
+  echom '"' . escape(bufname(a:bufnr), '"') . '" ' . fsize . "B written"
   call delete(a:tempfile)
   if exists("b:sshWriteLock")
     unlet b:sshWriteLock
   endif
+endfun
+
+fun! s:sshBufWriteErrFn(handle, msg)
+  if exists("b:sshWriteLock")
+    unlet b:sshWriteLock
+  endif
+  call s:sshErrFn(a:handle, a:msg)
 endfun
 
 augroup SshEdit
