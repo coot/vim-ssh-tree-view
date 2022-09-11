@@ -84,8 +84,6 @@ augroup SshEdit
   au BufReadCmd  ssh://* call s:sshBufReadCmd(expand("<afile>"), expand("<abuf>"))
 augroup END
 
-command -nargs=1 SshEdit :call SshEdit(<q-args>)
-
 " -------------
 " - Ssh Tree View
 "
