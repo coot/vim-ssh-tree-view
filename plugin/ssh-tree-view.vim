@@ -3,12 +3,14 @@
 "
 
 fun! s:sshBufCreate()
+  setl noswapfile
   if bufname() =~ '^ssh:\/\/'
     set buftype=acwrite
   endif
 endfun
 
 fun! s:sshBufReadCmd(bname, bnr)
+  setl noswapfile
   " While reading the file it is not modifiable.
   if empty(&filetype)
     filetype detect
